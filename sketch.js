@@ -1,92 +1,99 @@
-// Y-position of the floor (ground level)
+// PANIC BLOB
+// Emotion expressed via frantic motion, camera shake, color shift, and environment
+
 let floorY3;
+let platforms = [];
+
+// Panic FX
+let panic = 0; // 0..1
+let shakeAmt = 0; // camera shake strength
 
 // Player character (soft, animated blob)
 let blob3 = {
-  // Position (centre of the blob)
   x: 80,
   y: 0,
 
-  // Visual properties
-  r: 26, // Base radius
-  points: 48, // Number of points used to draw the blob
-  wobble: 7, // Edge deformation amount
-  wobbleFreq: 0.9,
+  r: 26,
+  points: 52,
+  wobble: 7,
+  wobbleFreq: 1.05,
 
-  // Time values for breathing animation
   t: 0,
-  tSpeed: 0.01,
+  tSpeed: 0.012,
 
-  // Physics: velocity
-  vx: 0, // Horizontal velocity
-  vy: 0, // Vertical velocity
+  vx: 0,
+  vy: 0,
 
-  // Movement tuning
-  accel: 0.55, // Horizontal acceleration
-  maxRun: 4.0, // Maximum horizontal speed
-  gravity: 0.65, // Downward force
-  jumpV: -11.0, // Initial jump impulse
+  // PANIC tuning
+  accel: 0.75,
+  maxRun: 4.8,
+  gravity: 0.7,
+  jumpV: -11.5,
 
-  // State
-  onGround: false, // True when standing on a platform
+  onGround: false,
 
-  // Friction
-  frictionAir: 0.995, // Light friction in air
-  frictionGround: 0.88, // Stronger friction on ground
+  frictionAir: 0.992,
+  frictionGround: 0.84,
 };
-
-// List of solid platforms the blob can stand on
-// Each platform is an axis-aligned rectangle (AABB)
-let platforms = [];
 
 function setup() {
   createCanvas(640, 360);
-
-  // Define the floor height
   floorY3 = height - 36;
 
   noStroke();
   textFont("sans-serif");
   textSize(14);
 
-  // Create platforms (floor + steps)
+  // Platforms
   platforms = [
-    { x: 0, y: floorY3, w: width, h: height - floorY3 }, // floor
-    { x: 120, y: floorY3 - 70, w: 120, h: 12 }, // low step
-    { x: 300, y: floorY3 - 120, w: 90, h: 12 }, // mid step
-    { x: 440, y: floorY3 - 180, w: 130, h: 12 }, // high step
-    { x: 520, y: floorY3 - 70, w: 90, h: 12 }, // return ramp
+    { x: 0, y: floorY3, w: width, h: height - floorY3 },
+    { x: 120, y: floorY3 - 70, w: 120, h: 12 },
+    { x: 300, y: floorY3 - 120, w: 90, h: 12 },
+    { x: 440, y: floorY3 - 180, w: 130, h: 12 },
+    { x: 520, y: floorY3 - 70, w: 90, h: 12 },
   ];
 
-  // Start the blob resting on the floor
+  // Start blob on the floor
   blob3.y = floorY3 - blob3.r - 1;
 }
 
 function draw() {
-  background(240);
+  // ----- Panic level from movement -----
+  const speed = abs(blob3.vx) + abs(blob3.vy) * 0.15;
+  panic = lerp(panic, constrain(speed / 6.0, 0, 1), 0.08);
 
-  // --- Draw all platforms ---
-  fill(200);
-  for (const p of platforms) {
-    rect(p.x, p.y, p.w, p.h);
-  }
+  // Alarm-style background pulse
+  const alarm = (sin(frameCount * 0.12) * 0.5 + 0.5) * panic;
+  background(240 - alarm * 80, 240 - alarm * 170, 240 - alarm * 170);
 
-  // --- Input: left/right movement ---
+  // Camera shake
+  shakeAmt = lerp(shakeAmt, panic * 6, 0.1);
+  const sx = random(-shakeAmt, shakeAmt);
+  const sy = random(-shakeAmt, shakeAmt);
+
+  push();
+  translate(sx, sy);
+
+  // ----- Draw platforms -----
+  drawPlatforms(alarm);
+
+  // ----- Input -----
   let move = 0;
-  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) move -= 1; // A or ←
-  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) move += 1; // D or →
-  blob3.vx += blob3.accel * move;
+  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) move -= 1;
+  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) move += 1;
 
-  // --- Apply friction and clamp speed ---
+  // Panic twitch
+  const twitch = (noise(frameCount * 0.05) - 0.5) * panic * 0.6;
+  blob3.vx += blob3.accel * (move + twitch);
+
+  // Friction + clamp
   blob3.vx *= blob3.onGround ? blob3.frictionGround : blob3.frictionAir;
   blob3.vx = constrain(blob3.vx, -blob3.maxRun, blob3.maxRun);
 
-  // --- Apply gravity ---
+  // Gravity
   blob3.vy += blob3.gravity;
 
-  // --- Collision representation ---
-  // We collide using a rectangle (AABB),
-  // even though the blob is drawn as a circle
+  // ----- Collision box -----
   let box = {
     x: blob3.x - blob3.r,
     y: blob3.y - blob3.r,
@@ -94,88 +101,58 @@ function draw() {
     h: blob3.r * 2,
   };
 
-  // --- STEP 1: Move horizontally, then resolve X collisions ---
+  // Horizontal collisions
   box.x += blob3.vx;
   for (const s of platforms) {
     if (overlap(box, s)) {
-      if (blob3.vx > 0) {
-        // Moving right → hit the left side of a platform
-        box.x = s.x - box.w;
-      } else if (blob3.vx < 0) {
-        // Moving left → hit the right side of a platform
-        box.x = s.x + s.w;
-      }
+      if (blob3.vx > 0) box.x = s.x - box.w;
+      else if (blob3.vx < 0) box.x = s.x + s.w;
       blob3.vx = 0;
+      shakeAmt += 1.5 * panic;
     }
   }
 
-  // --- STEP 2: Move vertically, then resolve Y collisions ---
+  // Vertical collisions
   box.y += blob3.vy;
   blob3.onGround = false;
 
   for (const s of platforms) {
     if (overlap(box, s)) {
       if (blob3.vy > 0) {
-        // Falling → land on top of a platform
         box.y = s.y - box.h;
+        if (blob3.vy > 5) shakeAmt += 3;
         blob3.vy = 0;
         blob3.onGround = true;
       } else if (blob3.vy < 0) {
-        // Rising → hit the underside of a platform
         box.y = s.y + s.h;
         blob3.vy = 0;
+        shakeAmt += 1.2 * panic;
       }
     }
   }
 
-  // --- Convert collision box back to blob centre ---
+  // Update blob position
   blob3.x = box.x + box.w / 2;
   blob3.y = box.y + box.h / 2;
-
-  // Keep blob inside the canvas horizontally
   blob3.x = constrain(blob3.x, blob3.r, width - blob3.r);
 
-  // --- Draw the animated blob ---
+  // ----- Blob visuals react to panic -----
+  blob3.tSpeed = 0.012 + panic * 0.028;
+  blob3.wobble = 7 + panic * 9;
+  blob3.wobbleFreq = 1.05 + panic * 0.9;
+
   blob3.t += blob3.tSpeed;
   drawBlobCircle(blob3);
 
-  // --- HUD ---
+  pop();
+
+  // ----- HUD -----
   fill(0);
-  text("Move: A/D or ←/→  •  Jump: Space/W/↑  •  Land on platforms", 10, 18);
+  text("Move: A/D or ←/→   Jump: Space/W/↑", 10, 18);
+  text("Emotion: PANIC   Panic Level: " + nf(panic, 1, 2), 10, 38);
 }
 
-// Axis-Aligned Bounding Box (AABB) overlap test
-// Returns true if rectangles a and b intersect
-function overlap(a, b) {
-  return (
-    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
-  );
-}
-
-// Draws the blob using Perlin noise for a soft, breathing effect
-function drawBlobCircle(b) {
-  fill(20, 120, 255);
-  beginShape();
-
-  for (let i = 0; i < b.points; i++) {
-    const a = (i / b.points) * TAU;
-
-    // Noise-based radius offset
-    const n = noise(
-      cos(a) * b.wobbleFreq + 100,
-      sin(a) * b.wobbleFreq + 100,
-      b.t,
-    );
-
-    const r = b.r + map(n, 0, 1, -b.wobble, b.wobble);
-
-    vertex(b.x + cos(a) * r, b.y + sin(a) * r);
-  }
-
-  endShape(CLOSE);
-}
-
-// Jump input (only allowed when grounded)
+// Jump input
 function keyPressed() {
   if (
     (key === " " || key === "W" || key === "w" || keyCode === UP_ARROW) &&
@@ -183,13 +160,65 @@ function keyPressed() {
   ) {
     blob3.vy = blob3.jumpV;
     blob3.onGround = false;
+    shakeAmt += 2;
   }
 }
 
-/* In-class tweaks for experimentation:
-   • Add a new platform:
-     platforms.push({ x: 220, y: floorY3 - 150, w: 80, h: 12 });
+// AABB overlap test
+function overlap(a, b) {
+  return (
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+  );
+}
 
-   • “Ice” feel → frictionGround = 0.95
-   • “Sand” feel → frictionGround = 0.80
-*/
+// Platform visuals (warning stripes + glow)
+function drawPlatforms(alarm) {
+  fill(190);
+  for (const p of platforms) rect(p.x, p.y, p.w, p.h);
+
+  // Warning stripes on thin platforms
+  for (const p of platforms) {
+    if (p.h > 20) continue;
+    const stripeH = 6;
+    for (let x = p.x; x < p.x + p.w; x += 14) {
+      fill(30, 30, 30, 140);
+      rect(x, p.y, 7, stripeH);
+      fill(250, 200 - alarm * 80, 20 + alarm * 40, 170);
+      rect(x + 7, p.y, 7, stripeH);
+    }
+  }
+
+  // Floor glow
+  fill(255, 60 + alarm * 120, 60 + alarm * 120, 120);
+  rect(0, floorY3 - 2, width, 2);
+}
+
+// Draw the blob
+function drawBlobCircle(b) {
+  // Calm blue → anxious red
+  const rr = lerp(20, 240, panic);
+  const gg = lerp(120, 60, panic);
+  const bb = lerp(255, 80, panic);
+  fill(rr, gg, bb);
+
+  beginShape();
+  for (let i = 0; i < b.points; i++) {
+    const a = (i / b.points) * TAU;
+
+    const n = noise(
+      cos(a) * b.wobbleFreq + 100,
+      sin(a) * b.wobbleFreq + 100,
+      b.t,
+    );
+
+    const jitter = (noise(i * 0.2, frameCount * 0.06) - 0.5) * panic * 2.2;
+
+    const r = b.r + map(n, 0, 1, -b.wobble, b.wobble) + jitter;
+    vertex(b.x + cos(a) * r, b.y + sin(a) * r);
+  }
+  endShape(CLOSE);
+
+  // Highlight
+  fill(255, 255, 255, 120);
+  ellipse(b.x - b.r * 0.25, b.y - b.r * 0.25, b.r * 0.5);
+}
