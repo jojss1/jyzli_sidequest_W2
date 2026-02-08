@@ -1,18 +1,18 @@
-## Project Title
+## Side Quest 2
 
-GBDA302 Week 2 Example 3: Platforms (AABB Collisions)
+GBDA302 Week 2 Example 3
 
 ---
 
 ## Authors
 
-Karen Cochrane and David Han
+Karen Cochrane, David Han, Jolin Li
 
 ---
 
 ## Description
 
-Adds several rectangular platforms. The blob is drawn as a noisy circle but collides using a simple axis-aligned bounding box (AABB). X and Y are resolved separately to keep behaviour predictable and teachable.
+The blob demonstrates a "panic" emotion where when it moves, the screen flashes red. The platforms have warning stripe design which adds to the emotion. There is also a panic level meter whenever the blob moves. 
 
 ---
 
@@ -23,7 +23,7 @@ Learning Goals:
 - Convert a circular sprite to an AABB for collision
 - Implement overlap test and push-out resolution
 - Manage grounded state only when landing on top faces
-
+ 
 ---
 
 ## Assets
